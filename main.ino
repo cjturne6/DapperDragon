@@ -6,38 +6,27 @@
 
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
 #define SCREEN_HEIGHT 64 // OLED display height, in pixels
+#define heatLamp (int)2
+#define uvbLamp (int)3
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 
 RTC_DS3231 rtc; // creates rtc instance
 
-DHT dht1(8, DHT22); // creates sensor instance
-DHT dht2(9, DHT22); // creates Senator instance
+DHT dht1(8, DHT22); DHT dht2(9, DHT22); // creates sensor instance
 
-// declares variables to store temperature & humidity data
-float temp1;
-float temp2;
-float hum1;
-float hum2;
-
-// initializes variables with pin numbers
-int heatLamp = 2;
-int uvbLamp = 3;
-
-// initializes Boolean flags used for switch state tables
-bool nighttime = 0;
-bool tooHot = 0;
-bool tooCold = 0;
+int temp1; int temp2; int hum1; int hum2; // declares variables to store temperature & humidity data
 
 DateTime now; // creates DateTime instance for use with rtc
 
 void setup() {
 	Serial.begin(9600);
-	
+	pinMode(heatLamp,OUTPUT);
+	pinMode(uvbLamp,OUTPUT);
 	dht1.begin();
 	dht2.begin();
 
-	// serial troubleshooting for display. replace with display output in the future.
+	// serial troubleshooting for display.
 	if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
 		Serial.println(F("SSD1306 allocation failed"));
 		for(;;);
@@ -61,59 +50,27 @@ void setup() {
 	display.setTextSize(1);
 	
 	// initializes both lamps as off
-	digitalWrite(3, LOW);
-	digitalWrite(2, LOW);
-}
-
-void getTime() {
-	now = rtc.now();
-	if (now.hour()<21 && now.hour()>=8) nighttime = 0;
-	else nighttime = 1;
+	digitalWrite(uvbLamp, HIGH); digitalWrite(heatLamp, HIGH);
 }
 
 void switchControl() {
-	if (nighttime==1) {
-		if (tooCold==0) {
-			digitalWrite(3, HIGH);
-			digitalWrite(2, HIGH);
-		}
-		else {
-			digitalWrite(3, HIGH);
-			digitalWrite(2, LOW);
-		}
-	}
-	
+  // If it is daytime, set lamps depending on temp.
+	  if (now.hour()<21 && now.hour()>=8) {
+    if (temp1>100 || temp2>85) { digitalWrite(uvbLamp,HIGH); digitalWrite(2,LOW); }
+	  else { digitalWrite(uvbLamp,LOW); digitalWrite(2,LOW); }
+  }
+
+  // If it is nighttime, set lamps depending on temp.
 	else {
-		if (tooHot==0) {
-		  digitalWrite(3, LOW);
-		  digitalWrite(2, LOW);
-		}
-		else {
-			digitalWrite(2,LOW);
-			digitalWrite(3,HIGH);
-		}
+    if (((temp1+temp2)/2)<65) {digitalWrite(heatLamp,LOW); digitalWrite(uvbLamp,HIGH); }
+		else { digitalWrite(uvbLamp, HIGH); digitalWrite(heatLamp, HIGH);}
 	}
 }
 
-void checkTemp() {
-	hum1 = dht1.readHumidity();
-	temp1 = dht1.readTemperature(true);		// true means fahrenheit
-	hum2 = dht2.readHumidity();
- 	temp2 = dht2.readTemperature(true);		// true means fahrenheit
-
-	// Check if any reads failed
-	if (isnan(hum1) || isnan(temp1)) Serial.println(F("Failed to read from sensor 1!"));
-	if (isnan(hum2) || isnan(temp2)) Serial.println(F("Failed to read from sensor 2!"));
-  
-	if (nighttime==0) {
-		if (temp1>100 || temp2>85) tooHot=1;
-		else tooHot=0;
-		}
-		
-	else {
-		if (((temp1+temp2)/2)<65) tooCold=1;
-		else tooCold=0;
-		}
+void getData() {
+	now = rtc.now();
+	hum1 = dht1.readHumidity(); temp1 = dht1.readTemperature(true);		// true means fahrenheit
+	hum2 = dht2.readHumidity(); temp2 = dht2.readTemperature(true);		// true means fahrenheit
 }
 
 void displayTime() {
@@ -126,8 +83,11 @@ void displayTime() {
 }
 
 void displaySwitch() {
+  Serial.println("Now displaying power");
+  
 	display.clearDisplay();
 	displayTime();
+  
 	display.setCursor(0,3);
 	display.print("POWER");
   
@@ -140,23 +100,15 @@ void displaySwitch() {
 	display.setCursor(0, 28);
 	display.println("UVB lamp:");
 	display.setCursor(90,28);
-	if (digitalRead(3)==LOW) display.print("ON");
+	if (digitalRead(uvbLamp)==LOW) display.print("ON");
 	else display.print("OFF");
   
-	display.setCursor(0, 40);
-	display.println("Reserved:");
-	display.setCursor(90,40);
-	display.print("N/A");
-	
-	display.setCursor(0, 52);
-	display.println("Reserved:");
-	display.setCursor(90,52);
-	display.print("N/A");
-  
 	display.display();
+  delay(5000);
 }
 
 void displayTemp() {
+  Serial.println("Now displaying temperature");
 	display.clearDisplay();
 	displayTime();
 	display.setCursor(0,3);
@@ -184,9 +136,11 @@ void displayTemp() {
 	display.print("F");
   
 	display.display();
+  delay(5000);
 }
 
 void displayHum() {
+  Serial.println("Now displaying humidity");
 	display.clearDisplay();
 	displayTime();
 	display.setCursor(0,3);
@@ -212,22 +166,13 @@ void displayHum() {
 	display.print((hum1+hum2)/2);
 	display.setCursor(122,56);
 	display.print("%");
-  
 	display.display();
+  delay(5000);
 }
 
 void loop() {
-	getTime();
-	checkTemp();
-	displaySwitch();
-	delay(5000);
-	getTime();
-	checkTemp();
-	displayHum();
-	delay(5000);
-	getTime();
-	checkTemp();
-	displayTemp();
-	switchControl();
-	delay(5000);
+	getData(); displaySwitch();
+	getData(); displayHum();
+	getData(); displayTemp();
+    switchControl();
 	}
