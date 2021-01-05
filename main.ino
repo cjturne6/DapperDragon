@@ -38,14 +38,10 @@ void setup() {
 	dht2.begin();
 
 	// serial troubleshooting for display. replace with display output in the future.
-	if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { // Address 0x3D for 128x64
+	if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
 		Serial.println(F("SSD1306 allocation failed"));
 		for(;;);
 		}
-	
-	#ifndef ESP8266
-		while (!Serial); // wait for serial port to connect. Needed for native USB
-		#endif
 	
 	// serial troubleshooting for rtc. replace with display output in the future.
 	if (! rtc.begin()) {
@@ -65,37 +61,37 @@ void setup() {
 	display.setTextSize(1);
 	
 	// initializes both lamps as off
-	digitalWrite(uvbLamp,0);
-	digitalWrite(heatLamp,0);
+	digitalWrite(3, LOW);
+	digitalWrite(2, LOW);
 }
 
 void getTime() {
 	now = rtc.now();
-	if (now.hour()>=21 || now.hour()<8) nighttime = 1;
 	if (now.hour()<21 && now.hour()>=8) nighttime = 0;
+	else nighttime = 1;
 }
 
 void switchControl() {
-	// all pin writes inverted
-	if (nighttime==1 && tooCold==0) {
-		digitalWrite(uvbLamp,1);
-		digitalWrite(heatLamp,1);
+	if (nighttime==1) {
+		if (tooCold==0) {
+			digitalWrite(3, HIGH);
+			digitalWrite(2, HIGH);
+		}
+		else {
+			digitalWrite(3, HIGH);
+			digitalWrite(2, LOW);
+		}
 	}
 	
-	else if (nighttime==0 && tooHot==0) {
-		digitalWrite(uvbLamp,0);
-		digitalWrite(heatLamp,0);
-	}
-	
-	else if (nighttime==1 && tooCold==1) {
-		digitalWrite(uvbLamp,1);
-		digitalWrite(heatLamp,0);
-	}
-	// removed for redundancy
-	
-	else if (nighttime==0 && tooHot==1) {
-		digitalWrite(uvbLamp,0);
-		digitalWrite(heatLamp,1);
+	else {
+		if (tooHot==0) {
+		  digitalWrite(3, LOW);
+		  digitalWrite(2, LOW);
+		}
+		else {
+			digitalWrite(2,LOW);
+			digitalWrite(3,HIGH);
+		}
 	}
 }
 
@@ -105,35 +101,19 @@ void checkTemp() {
 	hum2 = dht2.readHumidity();
  	temp2 = dht2.readTemperature(true);		// true means fahrenheit
 
-	// Check if any reads failed and exit early (to try again).
+	// Check if any reads failed
 	if (isnan(hum1) || isnan(temp1)) Serial.println(F("Failed to read from sensor 1!"));
 	if (isnan(hum2) || isnan(temp2)) Serial.println(F("Failed to read from sensor 2!"));
   
 	if (nighttime==0) {
 		if (temp1>100 || temp2>85) tooHot=1;
-		else if (temp1<=100 || temp2<=85) tooHot=0;
+		else tooHot=0;
 		}
 		
-	else if (nighttime==1) {
+	else {
 		if (((temp1+temp2)/2)<65) tooCold=1;
-		else if (((temp1+temp2)/2)>=65) tooCold=0;
+		else tooCold=0;
 		}
-	switchControl();
-	
-	/*
-	// serial output for every dht reading. remove in future version.
-	Serial.print(F("Humidity 1: "));
-	Serial.print(hum1);
-	Serial.print(F("%  Temperature 1: "));
-	Serial.print(temp1);
-	Serial.print(F("°F "));
-
-	Serial.print(F("Humidity 2: "));
-	Serial.print(hum2);
-	Serial.print(F("%  Temperature 2: "));
-	Serial.print(temp2);
-	Serial.println(F("°F"));
-	*/
 }
 
 void displayTime() {
@@ -143,7 +123,6 @@ void displayTime() {
 	display.print(":");
 	if (now.minute()<10) display.print("0"); // ensures proper number placement
 	display.print(now.minute(),DEC);
-	return;
 }
 
 void displaySwitch() {
@@ -155,14 +134,14 @@ void displaySwitch() {
 	display.setCursor(0, 16);
 	display.println("Heat lamp:");
 	display.setCursor(90,16);
-	if (digitalRead(heatLamp)==LOW) display.print("ON"); // condition reversed
-	if (digitalRead(heatLamp)==HIGH) display.print("OFF"); // condition reversed
+	if (digitalRead(2)==LOW) display.print("ON");
+	else display.print("OFF");
   
 	display.setCursor(0, 28);
 	display.println("UVB lamp:");
 	display.setCursor(90,28);
-	if (digitalRead(uvbLamp)==LOW) display.print("ON"); // condition reversed
-	if (digitalRead(uvbLamp)==HIGH) display.print("OFF"); // condition reversed
+	if (digitalRead(3)==LOW) display.print("ON");
+	else display.print("OFF");
   
 	display.setCursor(0, 40);
 	display.println("Reserved:");
@@ -175,7 +154,6 @@ void displaySwitch() {
 	display.print("N/A");
   
 	display.display();
-	return; // added for readability
 }
 
 void displayTemp() {
@@ -206,7 +184,6 @@ void displayTemp() {
 	display.print("F");
   
 	display.display();
-	return; // added for readability
 }
 
 void displayHum() {
@@ -237,7 +214,6 @@ void displayHum() {
 	display.print("%");
   
 	display.display();
-	return; // added for readability
 }
 
 void loop() {
@@ -250,9 +226,8 @@ void loop() {
 	displayHum();
 	delay(5000);
 	getTime();
-	// now = rtc.now(); removed due to redundancy
 	checkTemp();
 	displayTemp();
+	switchControl();
 	delay(5000);
-	// removed due to redundancy
 	}
